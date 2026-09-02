@@ -1,0 +1,67 @@
+plugins { id 'java' }
+group = 'dev.winlandcraft.plugins'
+version = '0.1.0'
+java { toolchain { languageVersion = JavaLanguageVersion.of(21) }; withSourcesJar() }
+dependencies {
+    compileOnly files('libs/winlandcraft-0.1.84-dev-plugin-api.jar')
+    testImplementation files('libs/winlandcraft-0.1.84-dev-plugin-api.jar')
+}
+
+// Keep upstream intact; generate the platform/Java 21 adaptations at build time.
+tasks.register('prepareEngine', Sync) {
+    from('engine/mochadoom/src') { include '**/*.java'; exclude 'mochadoom/Engine.java' }
+    into layout.buildDirectory.dir('engine-src')
+    doLast {
+        def main = layout.buildDirectory.file('engine-src/doom/DoomMain.java').get().asFile
+        main.text = main.text.replace('IMusic.chooseModule(cVarManager)', 'new wlcp.bridge.PcmMusic()')
+            .replace('ISoundDriver.chooseModule(this, cVarManager)', 'new wlcp.bridge.PcmSound(this)')
+        def wad = layout.buildDirectory.file('engine-src/w/WadLoader.java').get().asFile
+        wad.text = wad.text.replace('(CacheableDoomObject) thebuffer', 'new DoomBuffer(thebuffer)')
+            .replace('Track((CacheableDoomObject)thebuffer,lump)', 'Track(lumpcache[lump],lump)')
+    }
+}
+sourceSets {
+    engine {
+        java.srcDirs = ['build/engine-src', 'src/engine/java']
+    }
+}
+compileEngineJava {
+    dependsOn prepareEngine
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['--add-exports', 'java.desktop/com.sun.media.sound=ALL-UNNAMED']
+}
+tasks.register('engineJar', Jar) {
+    dependsOn engineClasses
+    archiveFileName = 'doom-engine.jar'
+    destinationDirectory = layout.buildDirectory.dir('engine')
+    from sourceSets.engine.output
+    from('LICENSE')
+    manifest { attributes 'Main-Class': 'mochadoom.Engine' }
+}
+processResources {
+    dependsOn engineJar
+    from(tasks.engineJar) { into 'runtime' }
+    from('assets/freedoom1.wad') { into 'runtime' }
+    from('licenses') { into 'licenses' }
+    from('LICENSE', 'THIRD-PARTY.md')
+    filesMatching('fabric.mod.json') { expand version: project.version }
+    doFirst {
+        if (!file('assets/freedoom1.wad').isFile()) throw new GradleException('Run scripts/fetch-freedoom.ps1 first')
+    }
+}
+tasks.register('verify', JavaExec) {
+    dependsOn testClasses, jar
+    classpath = sourceSets.test.runtimeClasspath
+    mainClass = 'dev.winlandcraft.doom.Checks'
+    args tasks.jar.archiveFile.get().asFile.absolutePath
+}
+test { enabled = false }
+check.dependsOn verify
+tasks.register('sourceDistribution', Zip) {
+    archiveClassifier = 'complete-source'
+    from('.') {
+        include 'src/**', 'engine/mochadoom/src/**', 'engine/mochadoom/LICENSE.TXT', 'engine/mochadoom/README.md'
+        include 'gradle/**', 'gradlew*', '*.gradle', '*.md', 'LICENSE', 'scripts/**', 'licenses/**', 'libs/**'
+    }
+}
+assemble.dependsOn sourceDistribution

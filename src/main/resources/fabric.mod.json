@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "wlcp_doom",
+  "version": "${version}",
+  "name": "DOOM for WinLandCraft",
+  "description": "Classic Doom in a WinLandCraft panel, with video, sound, music and WAD support.",
+  "environment": "client",
+  "license": "GPL-3.0-or-later",
+  "entrypoints": { "winlandcraft:plugins_v2": ["dev.winlandcraft.doom.DoomPlugin"] },
+  "depends": { "fabricloader": ">=0.16.9", "java": ">=21", "minecraft": "1.21.4", "winlandcraft": ">=0.1.83-dev" }
+}
